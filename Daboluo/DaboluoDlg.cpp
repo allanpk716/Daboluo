@@ -20,7 +20,6 @@ BOOL bHookOn = FALSE;			//安装全局钩子唯一一次
 //定义全局的底层键盘钩子回调函数
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode,WPARAM wParam,LPARAM lParam)
 {
-
 	if(nCode == HC_ACTION)
 	{
 		//当前顶层窗体是暗黑三的时候
@@ -148,16 +147,18 @@ BOOL CDaboluoDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
-	if(::RegisterHotKey(GetSafeHwnd(),IDC_CLIPCURSOR,MOD_CONTROL, VK_END) == FALSE)
+	if(::RegisterHotKey(GetSafeHwnd(),IDC_CLIPCURSOR,MOD_CONTROL, VK_END) == FALSE || ::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Nub3,MOD_ALT, 0x33) == FALSE)
 	{
 		AfxMessageBox("VK_END快捷键被占用了噻！");
 		bIsRegdit = FALSE;
 	}
 	else
+	{
 		bIsRegdit = TRUE;
-
+	}
 
 	InitPrompt();
+
 	MY_hWnd = NULL;
 	bIsLock = FALSE;
 
@@ -237,6 +238,18 @@ void CDaboluoDlg::OnTimer(UINT nIDEvent)
 		Cr.bottom = Crr.y;
 		::ClipCursor(&Cr);
 	}
+
+	CButton *pButton = (CButton *)GetDlgItem(IDC_CHECK_Nub3);
+	BOOL checked = pButton->GetCheck();
+
+	if(nIDEvent ==2 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd && checked)
+	{
+		keybd_event(0x33,0,0,0);
+		Sleep(30);
+		keybd_event(0x33,0,KEYEVENTF_KEYUP,0);
+	}
+
+
 	CDialog::OnTimer(nIDEvent);
 }
 
@@ -293,7 +306,7 @@ LONG CDaboluoDlg::OnHotKey(WPARAM wParam,LPARAM lParam)
 		{
 			if (EnableDebugPrivilege())
 			{
-				m_hkeyboard = SetWindowsHookEx(WH_KEYBOARD_LL,LowLevelKeyboardProc,GetModuleHandle("DaBoLuo.exe"),0);
+				m_hkeyboard = SetWindowsHookEx(WH_KEYBOARD_LL,LowLevelKeyboardProc,GetModuleHandle("Daboluo.exe"),0);
 
 				if (m_hkeyboard == NULL)
 					AfxMessageBox("安装低级键盘钩子失败！\n\n 将不能使用‘空格’原地攻击 功能！");
@@ -318,12 +331,29 @@ LONG CDaboluoDlg::OnHotKey(WPARAM wParam,LPARAM lParam)
 		return 0;
 	}
 
+	// 设置锁定
 	if(wParam == IDC_CLIPCURSOR)
+	{
 		bIsLock = !bIsLock;
+	}
+
+	// 设置是否使用 循环 数字 3
+	if (wParam == IDC_HOTKEY_Nub3)
+	{
+		CButton *pButton = (CButton *)GetDlgItem(IDC_CHECK_Nub3);
+		BOOL checked = pButton->GetCheck();
+
+		pButton->SetCheck(!checked);
+	}
+
 	if(bIsLock)
+	{
 		SetTimer(1, 200, NULL);
+		SetTimer(2, 200, NULL);
+	}
 	else
 	{
+		KillTimer(2);
 		KillTimer(1);
 		::ClipCursor(NULL);
 		bHookOn = FALSE;
@@ -403,7 +433,6 @@ void CDaboluoDlg::OnShowWindow()
 		ShowWindow(SW_SHOW);
 }
 
-
 LRESULT CDaboluoDlg::DefWindowProc(UINT message, WPARAM wParam, LPARAM lParam) 
 {
 
@@ -440,18 +469,17 @@ BOOL CDaboluoDlg::DestroyWindow()
 	if (bIsRegdit)
 	{
 		UnregisterHotKey(GetSafeHwnd(), IDC_CLIPCURSOR);
-		UnregisterHotKey(GetSafeHwnd(), 1064);
+		UnregisterHotKey(GetSafeHwnd(), IDC_HOTKEY_Nub3);
 	}
 	Shell_NotifyIcon(NIM_DELETE, &m_Nid); // 在托盘区删除图标
 
 	KillTimer(1);
+	KillTimer(2);
 
 	if (m_hkeyboard != NULL)
 	{
 		UnhookWindowsHookEx(m_hkeyboard);
 	}
-
-
 
 	HWND hwnd = GetSysTrayWnd()  ;
 	::InvalidateRect(hwnd,   NULL,   TRUE);
