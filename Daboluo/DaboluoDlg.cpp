@@ -219,11 +219,6 @@ BOOL CDaboluoDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// 设置大图标
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
-
-	// 设置是 简体中文还是繁体中文
-	CButton *pButton = (CButton *)GetDlgItem(IDC_RADIO_Simple);
-	pButton->SetCheck(TRUE);
-
 	// TODO: 在此添加额外的初始化代码
 	if(::RegisterHotKey(GetSafeHwnd(),IDC_CLIPCURSOR,MOD_CONTROL, VK_END) == FALSE ||
 		::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Nub3,MOD_ALT, VK_F3) == FALSE || 
@@ -390,18 +385,12 @@ BOOL CDaboluoDlg::bIsProcessExist(char *ProcessName)
 		{
 			MY_hWnd = NULL;
 
-			bool bState = GetBtState(IDC_RADIO_Simple);
-
-			if (bState == true)
-			{
-				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
-			}
-			else
+			MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
+			if (MY_hWnd == NULL)
 			{
 				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");//暗黑破壞神III
 			}
-
-				
+	
 			while(MY_hWnd != NULL)
 			{
 				DWORD tid = 0;
@@ -411,15 +400,13 @@ BOOL CDaboluoDlg::bIsProcessExist(char *ProcessName)
 				if(tid == pe32.th32ProcessID)
 					break;
 
-				if (bState == true)
-				{
-					MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
-				}
-				else
+				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
+				if (MY_hWnd == NULL)
 				{
 					MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");//暗黑破壞神III
 				}
 			}
+
 			CloseHandle(hProcessSnap);
 			if(MY_hWnd)
 				return TRUE;
