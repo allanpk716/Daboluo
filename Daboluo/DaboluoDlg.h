@@ -36,6 +36,8 @@ protected:
 	NOTIFYICONDATA m_Nid;//最小化任务栏
 	HWND GetSysTrayWnd();//刷新系统托盘图标
 
+	bool GetBtState(int iControlId);
+
 	// 生成的消息映射函数
 	virtual BOOL OnInitDialog();
 	afx_msg void OnSysCommand(UINT nID, LPARAM lParam);
@@ -48,4 +50,9 @@ protected:
 	afx_msg LRESULT OnShowTask(WPARAM wParam, LPARAM lParam);
 	afx_msg void OnShowWindow();
 	DECLARE_MESSAGE_MAP()
+public:
+	float m_fCdTime;
+	afx_msg void OnBnClickedCheckNub123();
+	afx_msg void OnBnClickedCheckShift();
+	BOOL m_bUserShift;
 };

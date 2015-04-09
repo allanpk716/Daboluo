@@ -12,10 +12,24 @@
 #define new DEBUG_NEW
 #endif
 
+#define WM_SHOWTASK WM_USER+101
+#define IDM_SHOW_WINDOW	WM_USER+102
+
 HWND  MY_hWnd;		  //全局的暗黑窗体句柄
 HHOOK m_hkeyboard;    //键盘底层钩子句柄
 BOOL inCharStatus = FALSE; // 判断是否为聊天状态
 BOOL bHookOn = FALSE;			//安装全局钩子唯一一次
+bool bNumber4IsPressed = FALSE;// 大键盘数字键4已经按下
+bool bTerminateThreadDone = false; // 是否已经终结过一次线程了
+bool bIsOnTimePressed = false; // 是否是定时器按下的按键
+
+float fCdtime = 4;	// 技能cd 时间
+bool bUserShift = false; // 是否使用Shift + Space 攻击
+
+HANDLE   hThread;    
+void WaittingThread(LPVOID pParam);  
+DWORD   dwThreadId,  dwThrdParam   =   1;
+
 
 //定义全局的底层键盘钩子回调函数
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode,WPARAM wParam,LPARAM lParam)
@@ -39,21 +53,73 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode,WPARAM wParam,LPARAM lParam)
 				//Hook  Space 按键
 				if (VK_SPACE == kbstruct->vkCode)
 				{
-					keybd_event(VK_LSHIFT,0,0,0);
-					//	Sleep(30);
+					if (bUserShift == true)
+					{
+						keybd_event(VK_LSHIFT,0,0,0);
+					}
+
 					mouse_event(MOUSEEVENTF_LEFTDOWN,0,0,0,0);
 					Sleep(30);
 					mouse_event(MOUSEEVENTF_LEFTUP,0,0,0,0);
-					//	Sleep(30);
-					keybd_event(VK_LSHIFT,0,KEYEVENTF_KEYUP,0);
+
+					if (bUserShift == true)
+					{
+						keybd_event(VK_LSHIFT,0,KEYEVENTF_KEYUP,0);
+					}
+
 					return 1;
-				}	
+				}
+
+				// 大键盘数字键 4
+				if (0x34 == kbstruct->vkCode)
+				{
+					bTerminateThreadDone = true;
+					bNumber4IsPressed = TRUE;
+
+					hThread = CreateThread(NULL,                //   default   security   attributes     
+						0,                                      //   use   default   stack   size       
+						(LPTHREAD_START_ROUTINE)WaittingThread,    //   thread   function     
+						&dwThrdParam,                           //   argument   to   thread   function     
+						0,                                      //   use   default   creation   flags     
+						&dwThreadId);
+				}
+				else if (kbstruct->vkCode == 0x31 ||
+					kbstruct->vkCode == 0x32 ||
+					kbstruct->vkCode == 0x33)
+				{
+					// 如果是定时器按下的，那么就不过处理
+					if (bIsOnTimePressed == true)
+					{
+						bIsOnTimePressed =false;
+					}
+					else if (bTerminateThreadDone == false)
+					{
+						bIsOnTimePressed = false;
+
+						if (TerminateThread(hThread, 0) == TRUE)
+						{
+							CloseHandle(hThread);
+							bTerminateThreadDone = true;
+							bNumber4IsPressed = false;
+						}
+					}
+				}
 			}
 		}
 	}
 
 	return CallNextHookEx(m_hkeyboard,nCode,wParam,lParam);
 }
+
+void WaittingThread(LPVOID pParam)  
+{
+	bTerminateThreadDone = false;
+	Sleep(fCdtime * 1100);
+	if (bNumber4IsPressed == true)
+	{
+		bNumber4IsPressed = false;
+	}
+} 
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -93,6 +159,8 @@ END_MESSAGE_MAP()
 
 CDaboluoDlg::CDaboluoDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CDaboluoDlg::IDD, pParent)
+	, m_fCdTime(4)
+	, m_bUserShift(FALSE)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -100,6 +168,9 @@ CDaboluoDlg::CDaboluoDlg(CWnd* pParent /*=NULL*/)
 void CDaboluoDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Text(pDX, IDC_EDIT_CdTime, m_fCdTime);
+	DDV_MinMaxFloat(pDX, m_fCdTime, 2, 10);
+	DDX_Check(pDX, IDC_CHECK_Shift, m_bUserShift);
 }
 
 BEGIN_MESSAGE_MAP(CDaboluoDlg, CDialogEx)
@@ -112,6 +183,8 @@ BEGIN_MESSAGE_MAP(CDaboluoDlg, CDialogEx)
 	ON_MESSAGE(WM_HOTKEY,OnHotKey)
 	ON_MESSAGE(WM_SHOWTASK, OnShowTask)
 	ON_COMMAND(IDM_SHOW_WINDOW, OnShowWindow)
+	ON_BN_CLICKED(IDC_CHECK_Nub123, &CDaboluoDlg::OnBnClickedCheckNub123)
+	ON_BN_CLICKED(IDC_CHECK_Shift, &CDaboluoDlg::OnBnClickedCheckShift)
 END_MESSAGE_MAP()
 
 
@@ -146,8 +219,17 @@ BOOL CDaboluoDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// 设置大图标
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
+
+	// 设置是 简体中文还是繁体中文
+	CButton *pButton = (CButton *)GetDlgItem(IDC_RADIO_Simple);
+	pButton->SetCheck(TRUE);
+
 	// TODO: 在此添加额外的初始化代码
-	if(::RegisterHotKey(GetSafeHwnd(),IDC_CLIPCURSOR,MOD_CONTROL, VK_END) == FALSE || ::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Nub3,MOD_ALT, VK_F3) == FALSE)
+	if(::RegisterHotKey(GetSafeHwnd(),IDC_CLIPCURSOR,MOD_CONTROL, VK_END) == FALSE ||
+		::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Nub3,MOD_ALT, VK_F3) == FALSE || 
+		::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Nub123,MOD_ALT, VK_F2) == FALSE ||
+		::RegisterHotKey(GetSafeHwnd(),IDC_HOTKEY_Shift,MOD_ALT, VK_F1) == FALSE
+		)
 	{
 		AfxMessageBox("VK_END快捷键被占用了噻！");
 		bIsRegdit = FALSE;
@@ -161,6 +243,10 @@ BOOL CDaboluoDlg::OnInitDialog()
 
 	MY_hWnd = NULL;
 	bIsLock = FALSE;
+
+	UpdateData(TRUE);
+	bUserShift = m_bUserShift = TRUE;
+	UpdateData(FALSE);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -221,7 +307,7 @@ void CDaboluoDlg::OnClose()
 
 void CDaboluoDlg::OnTimer(UINT nIDEvent) 
 {
-	if(nIDEvent ==1 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd)
+	if(nIDEvent == 1 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd)
 	{
 		CRect Cr;
 		CPoint Crl, Crr;
@@ -242,18 +328,49 @@ void CDaboluoDlg::OnTimer(UINT nIDEvent)
 	CButton *pButton = (CButton *)GetDlgItem(IDC_CHECK_Nub3);
 	BOOL checked = pButton->GetCheck();
 
-	if(nIDEvent ==2 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd && checked)
+	if(nIDEvent == 2 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd && checked)
 	{
 		keybd_event(0x33,0,0,0);
 		Sleep(30);
 		keybd_event(0x33,0,KEYEVENTF_KEYUP,0);
 	}
 
+	pButton = (CButton *)GetDlgItem(IDC_CHECK_Nub123);
+	checked = pButton->GetCheck();
+
+	if(nIDEvent == 3 && MY_hWnd != NULL && GetForegroundWindow()->GetSafeHwnd() == MY_hWnd && checked)
+	{
+		if (bNumber4IsPressed == false)
+		{
+			bIsOnTimePressed = true;
+			keybd_event(0x31,0,0,0);
+			Sleep(30);
+			keybd_event(0x31,0,KEYEVENTF_KEYUP,0);
+			Sleep(30);
+			bIsOnTimePressed = true;
+			keybd_event(0x32,0,0,0);
+			Sleep(30);
+			keybd_event(0x32,0,KEYEVENTF_KEYUP,0);
+			Sleep(30);
+			bIsOnTimePressed = true;
+			keybd_event(0x33,0,0,0);
+			Sleep(30);
+			keybd_event(0x33,0,KEYEVENTF_KEYUP,0);
+		}
+	}
 
 	CDialog::OnTimer(nIDEvent);
 }
 
-BOOL   CDaboluoDlg::bIsProcessExist(char *ProcessName)
+bool CDaboluoDlg::GetBtState(int iControlId)
+{
+	CButton *pButton = (CButton *)GetDlgItem(iControlId);
+	BOOL checked = pButton->GetCheck();
+
+	return checked;
+}
+
+BOOL CDaboluoDlg::bIsProcessExist(char *ProcessName)
 {
 	PROCESSENTRY32 pe32;
 	pe32.dwSize=sizeof(pe32);
@@ -272,7 +389,19 @@ BOOL   CDaboluoDlg::bIsProcessExist(char *ProcessName)
 		if(strcmp(strupr(pe32.szExeFile),ProcessName)==0)
 		{
 			MY_hWnd = NULL;
-			MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");//暗黑破壞神III
+
+			bool bState = GetBtState(IDC_RADIO_Simple);
+
+			if (bState == true)
+			{
+				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
+			}
+			else
+			{
+				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");//暗黑破壞神III
+			}
+
+				
 			while(MY_hWnd != NULL)
 			{
 				DWORD tid = 0;
@@ -281,7 +410,15 @@ BOOL   CDaboluoDlg::bIsProcessExist(char *ProcessName)
 				HANDLE h2 = AfxGetInstanceHandle();
 				if(tid == pe32.th32ProcessID)
 					break;
-				MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");
+
+				if (bState == true)
+				{
+					MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破坏神III");//暗黑破壞神III
+				}
+				else
+				{
+					MY_hWnd = ::FindWindowEx(NULL, MY_hWnd, NULL, "暗黑破壞神III");//暗黑破壞神III
+				}
 			}
 			CloseHandle(hProcessSnap);
 			if(MY_hWnd)
@@ -335,6 +472,18 @@ LONG CDaboluoDlg::OnHotKey(WPARAM wParam,LPARAM lParam)
 	if(wParam == IDC_CLIPCURSOR)
 	{
 		bIsLock = !bIsLock;
+
+		UpdateData(TRUE);
+		bUserShift = m_bUserShift;
+		UpdateData(FALSE);
+	}
+
+	if (wParam == IDC_HOTKEY_Shift)
+	{
+		CButton *pButton = (CButton *)GetDlgItem(IDC_CHECK_Shift);
+		BOOL checked = pButton->GetCheck();
+
+		pButton->SetCheck(!checked);
 	}
 
 	// 设置是否使用 循环 数字 3
@@ -346,13 +495,28 @@ LONG CDaboluoDlg::OnHotKey(WPARAM wParam,LPARAM lParam)
 		pButton->SetCheck(!checked);
 	}
 
+	// 设置是否使用 循环 数字 123
+	if (wParam == IDC_HOTKEY_Nub123)
+	{
+		UpdateData(TRUE);
+		fCdtime = m_fCdTime;
+		UpdateData(FALSE);
+
+		CButton *pButton = (CButton *)GetDlgItem(IDC_CHECK_Nub123);
+		BOOL checked = pButton->GetCheck();
+
+		pButton->SetCheck(!checked);
+	}
+
 	if(bIsLock)
 	{
 		SetTimer(1, 200, NULL);
 		SetTimer(2, 200, NULL);
+		SetTimer(3, 200, NULL);
 	}
 	else
 	{
+		KillTimer(3);
 		KillTimer(2);
 		KillTimer(1);
 		::ClipCursor(NULL);
@@ -470,11 +634,13 @@ BOOL CDaboluoDlg::DestroyWindow()
 	{
 		UnregisterHotKey(GetSafeHwnd(), IDC_CLIPCURSOR);
 		UnregisterHotKey(GetSafeHwnd(), IDC_HOTKEY_Nub3);
+		UnregisterHotKey(GetSafeHwnd(), IDC_HOTKEY_Nub123);
 	}
 	Shell_NotifyIcon(NIM_DELETE, &m_Nid); // 在托盘区删除图标
 
 	KillTimer(1);
 	KillTimer(2);
+	KillTimer(3);
 
 	if (m_hkeyboard != NULL)
 	{
@@ -492,4 +658,18 @@ BOOL CDaboluoDlg::DestroyWindow()
 BOOL CDaboluoDlg::PreTranslateMessage(MSG* pMsg) 
 { 
 	return CDialog::PreTranslateMessage(pMsg);
+}
+
+void CDaboluoDlg::OnBnClickedCheckNub123()
+{
+	UpdateData(TRUE);
+	fCdtime = m_fCdTime;
+	UpdateData(FALSE);
+}
+
+void CDaboluoDlg::OnBnClickedCheckShift()
+{
+	UpdateData(TRUE);
+	bUserShift = m_bUserShift;
+	UpdateData(FALSE);
 }
